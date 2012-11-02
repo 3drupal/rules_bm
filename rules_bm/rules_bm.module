@@ -1,0 +1,75 @@
+<?php
+
+/**
+ * Implements hook_rules_action_info().
+ * @return array
+ */
+
+function rules_bm_rules_action_info() {
+  $actions = array();
+  
+  if(module_exists('backup_migrate')){
+    $actions['rules_bm_action_backup'] = array(
+      'label' => t('Backup database to file in manual destination'),
+      'group' => t('3Drupal | Rules Backup&Migrate'),
+    );
+    $actions['rules_bm_action_restore_db_file'] = array(
+      'label' => t('Restore database from file in manual destination'),
+      'group' => t('3Drupal | Rules Backup&Migrate'),
+      'parameter' => array(
+        'db_file' => array(
+          'type' => 'text',  
+          'label' => t('Select database file'),
+          'options list' => 'rules_bm_get_backup_files',
+          'restriction' => 'input',  
+        ),  
+      ),
+    );
+  }
+  return $actions;
+}
+
+function rules_bm_action_backup() {
+  backup_migrate_include('files', 'profiles');
+
+  $settings = _backup_migrate_profile_saved_default_profile();
+  $settings->destination_id = 'manual';
+  $settings->source_id = 'db';
+  $settings->filename = 'rules_bm_db_backup';
+  $settings->filters['compression'] = 'none';
+  $settings->filters['utils_site_offline'] = 0;
+  backup_migrate_perform_backup($settings);
+  
+  drupal_set_message(t('Backup complete'));
+  watchdog('action', t('Backed up database'));
+}
+
+function rules_bm_action_restore_db_file($db_file) {
+  backup_migrate_include('profiles', 'destinations');
+  backup_migrate_perform_restore('manual', $db_file);
+  watchdog('action', t('Restore complete'));
+}
+
+function rules_bm_get_backup_files () {
+  backup_migrate_include('destinations');
+  $destination = backup_migrate_get_destination('manual');
+  $files = $destination->list_files();
+    
+  foreach ((array)$files as $key=>$file) {
+  // Show only files that can be restored from.
+    if ($file->is_recognized_type()) {
+      // $info = $file->info();
+      $filename = check_plain($key);
+      $out[$filename] = $filename;
+    }
+  }
+  
+  if (count($out) > 1) {
+    $backup_files_list = $out;
+  }
+  else {
+    $backup_files_list = array('no backup files in manual destination');
+  }
+  
+  return $backup_files_list;
+}
